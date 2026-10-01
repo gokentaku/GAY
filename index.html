@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 强制锁定浅色模式，防止 iOS webview 自动将背景变成纯黑 -->
+    <meta name="color-scheme" content="light">
+    <title>优雅躲避 - Apple风格小游戏</title>
+    
+    <style>
+        :root {
+            --bg-color: #f5f5f7;
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --accent-color: #0071e3;
+            --shadow-light: rgba(0, 0, 0, 0.05);
+            --shadow-medium: rgba(0, 0, 0, 0.12);
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f5f5f7 !important; /* 强制浅色背景 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            touch-action: none; /* 彻底阻止移动端默认的滑动行为 */
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            max-height: 850px;
+            background-color: #ffffff !important; /* 强制白色容器 */
+            box-shadow: 0 10px 30px var(--shadow-light);
+            overflow: hidden;
+        }
+
+        @media (min-width: 501px) {
+            #game-container {
+                height: 90vh;
+                border-radius: 40px;
+                border: 8px solid #e5e5ea;
+            }
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: transparent; 
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 顶部记分板 */
+        .header {
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .score-board {
+            background: rgba(255, 255, 255, 0.85);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text-primary);
+            box-shadow: 0 4px 12px var(--shadow-light);
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.85);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            pointer-events: auto;
+            opacity: 1;
+            transition: opacity 0.4s ease;
+        }
+
+        .overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.5;
+        }
+
+        .btn {
+            background-color: var(--text-primary);
+            color: #ffffff;
+            border: none;
+            padding: 16px 36px;
+            font-size: 17px;
+            font-weight: 600;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .controls {
+            padding: 24px;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        .control-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.6);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 24px;
+            height: 64px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-primary);
+            box-shadow: 0 4px 12px var(--shadow-light);
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+
+        .control-btn.active {
+            background: rgba(0,0,0,0.1);
+        }
+
+        .control-icon {
+            width: 28px;
+            height: 28px;
+            fill: currentColor;
+        }
+
+        .rainbow-text {
+            background: linear-gradient(to right, #ff3b30, #ff9500, #4cd964, #5ac8fa, #007aff, #5856d6, #ff2d55);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-weight: 800;
+            animation: hue-rotate 3s linear infinite;
+        }
+
+        @keyframes hue-rotate {
+            from { filter: hue-rotate(0deg); }
+            to { filter: hue-rotate(360deg); }
+        }
+        
+        #game-over-reason {
+            font-size: 22px;
+            margin-bottom: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 核心游戏画布 -->
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="ui-layer">
+            <div class="header">
+                <div class="score-board">坚持: <span id="score">0.0</span>s</div>
+                <div class="score-board" id="invincible-indicator" style="opacity: 0; color: #ff9500;">无敌状态</div>
+            </div>
+
+            <!-- 开始菜单 -->
+            <div id="start-screen" class="overlay">
+                <h1 class="title">优雅闪避</h1>
+                <p class="subtitle">点击下方按钮或左右屏幕控制移动。<br>躲避下落的文字，拾取发光球获得无敌状态。</p>
+                <button class="btn" id="start-btn">开始挑战</button>
+            </div>
+
+            <div id="game-over-screen" class="overlay hidden">
+                <h1 class="title rainbow-text">游戏结束</h1>
+                <div id="game-over-reason" class="rainbow-text">恭喜你变成了gay</div>
+                <p class="subtitle">本次坚持了 <span id="final-score" style="font-weight: bold;">0</span> 秒</p>
+                <button class="btn" id="restart-btn">再试一次</button>
+            </div>
+
+            <!-- 底部虚拟控制键 -->
+            <div class="controls">
+                <div class="control-btn" id="btn-left">
+                    <svg class="control-icon" viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+                </div>
+                <div class="control-btn" id="btn-right">
+                    <svg class="control-icon" viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // alpha: false 优化性能，我们会自己画背景
+        const container = document.getElementById('game-container');
+        
+        // DOM 元素引用
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('final-score');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const invincibleIndicator = document.getElementById('invincible-indicator');
+        const btnLeft = document.getElementById('btn-left');
+        const btnRight = document.getElementById('btn-right');
+
+        // 加载人物头像 (使用 Base64 本地嵌入)
+        const headImage = new Image();
+        let headImageLoaded = false;
+        
+        headImage.onload = () => { headImageLoaded = true; };
+        headImage.onerror = () => { headImageLoaded = false; };
+        
+        // 【终极方案】：将你转换好的 Base64 长字符串粘贴在下面的单引号内。
+        // 这里我先放了一个 1x1 像素的占位图防报错，请把它整个替换掉！
+        headImage.src = 'data:image/jpeg;base64,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'; 
+
+        // 兼容所有 iOS 的自定义圆角矩形绘制函数 (代替容易崩溃的 ctx.roundRect)
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        const GAME_STATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+        let currentState = GAME_STATE.MENU;
+
+        let width, height;
+        function resize() {
+            // 安全获取容器尺寸，防止 iOS Webview 初始化时拿到 0
+            width = container.clientWidth || window.innerWidth || 300;
+            height = container.clientHeight || window.innerHeight || 600;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            if (player) {
+                player.y = height - player.totalHeight - 120;
+            }
+        }
+        window.addEventListener('resize', resize);
+
+        class Player {
+            constructor() {
+                this.totalHeight = 100;
+                // 根据要求，头身比例大约 3:2，头部稍大
+                this.headRadius = (this.totalHeight * 0.6) / 2;
+                this.bodyWidth = 40;
+                this.bodyHeight = this.totalHeight * 0.4;
+                
+                this.x = width / 2;
+                this.y = height - this.totalHeight - 120;
+                
+                this.vx = 0;
+                this.speed = 6.5;
+                
+                this.isInvincible = false;
+                this.invincibleTimer = 0;
+                
+                this.isRainbow = false;
+                this.rainbowHue = 0;
+            }
+
+            update(dt) {
+                // 平滑的物理位移
+                if (keys.left || btnLeftActive) {
+                    this.vx = -this.speed;
+                } else if (keys.right || btnRightActive) {
+                    this.vx = this.speed;
+                } else {
+                    this.vx *= 0.8;
+                }
+                this.x += this.vx;
+
+                // 边界碰撞
+                const halfWidth = Math.max(this.headRadius, this.bodyWidth / 2);
+                if (this.x - halfWidth < 0) this.x = halfWidth;
+                if (this.x + halfWidth > width) this.x = width - halfWidth;
+
+                // 状态计时器
+                if (this.isInvincible) {
+                    this.invincibleTimer -= dt;
+                    if (this.invincibleTimer <= 0) {
+                        this.isInvincible = false;
+                        invincibleIndicator.style.opacity = 0;
+                    } else {
+                        // 闪烁效果
+                        invincibleIndicator.style.opacity = Math.floor(this.invincibleTimer / 100) % 2 === 0 ? 1 : 0.5;
+                    }
+                }
+                
+                if (this.isRainbow) {
+                    this.rainbowHue = (this.rainbowHue + 8) % 360;
+                }
+            }
+
+            draw(ctx) {
+                const headY = this.y + this.headRadius;
+                
+                ctx.save();
+                // 绘制躯干
+                if (this.isRainbow) {
+                    ctx.fillStyle = `hsl(${this.rainbowHue}, 80%, 60%)`;
+                } else {
+                    ctx.fillStyle = '#8e9eab';
+                }
+                const bodyY = this.y + this.headRadius * 2 - 5;
+                drawRoundedRect(ctx, this.x - this.bodyWidth/2, bodyY, this.bodyWidth, this.bodyHeight, 10);
+                
+                // 绘制腿部
+                if (this.isRainbow) {
+                    ctx.fillStyle = `hsl(${(this.rainbowHue+40)%360}, 80%, 50%)`;
+                } else {
+                    ctx.fillStyle = '#6b7a8a';
+                }
+                drawRoundedRect(ctx, this.x - 12, bodyY + this.bodyHeight - 5, 8, 20, 4);
+                drawRoundedRect(ctx, this.x + 4, bodyY + this.bodyHeight - 5, 8, 20, 4);
+                ctx.restore();
+
+                ctx.save();
+                
+                // 无敌光环
+                if (this.isInvincible) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, headY, this.headRadius + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 149, 0, 0.3)';
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = 'rgba(255, 149, 0, 0.8)';
+                    ctx.stroke();
+                }
+
+                // 裁剪出圆形的头像区域
+                ctx.beginPath();
+                ctx.arc(this.x, headY, this.headRadius, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+
+                // 鲁棒的图像渲染
+                if (headImageLoaded && headImage.width > 0) {
+                    if (this.isRainbow) {
+                        ctx.drawImage(headImage, this.x - this.headRadius, headY - this.headRadius, this.headRadius * 2, this.headRadius * 2);
+                        // 覆盖一层色彩合成，实现彩虹脸
+                        ctx.globalCompositeOperation = "color";
+                        ctx.fillStyle = `hsl(${this.rainbowHue}, 100%, 50%)`;
+                        ctx.fillRect(this.x - this.headRadius, headY - this.headRadius, this.headRadius * 2, this.headRadius * 2);
+                    } else {
+                        ctx.drawImage(headImage, this.x - this.headRadius, headY - this.headRadius, this.headRadius * 2, this.headRadius * 2);
+                    }
+                } else {
+                    // 图片未加载时的防崩溃占位符
+                    ctx.fillStyle = this.isRainbow ? `hsl(${this.rainbowHue}, 80%, 60%)` : '#d1d1d6';
+                    ctx.fill();
+                    ctx.fillStyle = '#1d1d1f';
+                    ctx.font = "14px sans-serif";
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText("加载中", this.x, headY);
+                }
+
+                // 头部内阴影增加 Apple 式的立体感
+                ctx.beginPath();
+                ctx.arc(this.x, headY, this.headRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(0,0,0,0.15)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+            
+            getHitbox() {
+                return { x: this.x, y: this.y + this.headRadius, radius: this.headRadius * 0.8 };
+            }
+        }
+
+        class Enemy {
+            constructor(speedMultiplier) {
+                this.text = "gay";
+                this.fontSize = Math.random() * 14 + 20; // 随机大小
+                this.x = Math.random() * (width - 40) + 20;
+                this.y = -50;
+                
+                // 莫兰迪低饱和色系
+                const grays = ['#86868b', '#aeaeb2', '#c7c7cc'];
+                this.color = grays[Math.floor(Math.random() * grays.length)];
+                
+                this.vy = (Math.random() * 2 + 3) * speedMultiplier; 
+                this.active = true;
+            }
+
+            update(dt) {
+                this.y += this.vy;
+                if (this.y > height + 50) this.active = false;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.font = `800 ${this.fontSize}px sans-serif`;
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+            
+            getHitbox() {
+                return { x: this.x, y: this.y, radius: this.fontSize * 0.4 };
+            }
+        }
+
+        class Item {
+            constructor() {
+                this.radius = 12;
+                this.x = Math.random() * (width - 40) + 20;
+                this.y = -30;
+                this.vy = 2.5;
+                this.active = true;
+                this.pulseTimer = 0;
+            }
+
+            update(dt) {
+                this.y += this.vy;
+                this.pulseTimer += dt;
+                if (this.y > height + 50) this.active = false;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                // 呼吸闪烁发光特效
+                const scale = 1 + Math.sin(this.pulseTimer / 150) * 0.15;
+                ctx.translate(this.x, this.y);
+                ctx.scale(scale, scale);
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffcc00';
+                ctx.fill();
+                
+                ctx.shadowColor = '#ffcc00';
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = 'rgba(255, 204, 0, 0.5)';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius + 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+            
+            getHitbox() {
+                return { x: this.x, y: this.y, radius: this.radius + 5 };
+            }
+        }
+
+        let player, entities = [], score = 0, startTime = 0, lastTime = 0;
+        let baseSpawnRate = 1000, spawnTimer = 0, itemSpawnTimer = 0, difficultyMultiplier = 1;
+
+        // 操作状态
+        const keys = { left: false, right: false };
+        let btnLeftActive = false, btnRightActive = false;
+
+        // 键盘操作
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+        });
+        window.addEventListener('keyup', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+        });
+
+        // 稳健的触摸绑定，支持防穿透
+        function bindBtn(el, setVarCallback) {
+            const press = (e) => { e.preventDefault(); setVarCallback(true); el.classList.add('active'); };
+            const release = () => { setVarCallback(false); el.classList.remove('active'); };
+            el.addEventListener('mousedown', press);
+            el.addEventListener('touchstart', press, { passive: false });
+            window.addEventListener('mouseup', release);
+            window.addEventListener('touchend', release);
+        }
+        
+        bindBtn(btnLeft, (val) => btnLeftActive = val);
+        bindBtn(btnRight, (val) => btnRightActive = val);
+
+        function checkCollision(c1, c2) {
+            const dx = c1.x - c2.x;
+            const dy = c1.y - c2.y;
+            return Math.sqrt(dx * dx + dy * dy) < (c1.radius + c2.radius);
+        }
+
+        let animationFrameId = null;
+
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (currentState === GAME_STATE.PLAYING) {
+                update(dt);
+                draw();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            } else if (currentState === GAME_STATE.GAMEOVER) {
+                // 仅更新彩虹状态，不生成新敌人
+                if (player.isRainbow) player.update(dt);
+                draw();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function update(dt) {
+            score = (Date.now() - startTime) / 1000;
+            scoreEl.textContent = score.toFixed(1);
+
+            // 难度随着时间非线性递增
+            difficultyMultiplier = 1 + (score / 10) * 0.2;
+            const currentSpawnRate = Math.max(200, baseSpawnRate - (score * 15)); 
+
+            // 生成文字
+            spawnTimer -= dt;
+            if (spawnTimer <= 0) {
+                let count = Math.floor(Math.random() * difficultyMultiplier) + 1;
+                for(let i=0; i<count; i++) entities.push(new Enemy(difficultyMultiplier));
+                spawnTimer = currentSpawnRate;
+            }
+
+            // 生成道具
+            itemSpawnTimer -= dt;
+            if (itemSpawnTimer <= 0) {
+                entities.push(new Item());
+                itemSpawnTimer = 15000 + Math.random() * 5000; // 15-20秒随机掉落
+            }
+
+            player.update(dt);
+            
+            // 实体更新与碰撞结算
+            const playerHitbox = player.getHitbox();
+            for (let i = entities.length - 1; i >= 0; i--) {
+                const entity = entities[i];
+                entity.update(dt);
+
+                if (!entity.active) {
+                    entities.splice(i, 1);
+                    continue;
+                }
+
+                if (checkCollision(playerHitbox, entity.getHitbox())) {
+                    if (entity instanceof Enemy) {
+                        if (!player.isInvincible) {
+                            triggerGameOver();
+                            break;
+                        } else {
+                            entity.active = false; // 无敌状态弹开文字
+                        }
+                    } else if (entity instanceof Item) {
+                        player.isInvincible = true;
+                        player.invincibleTimer = 3000; // 3秒无敌
+                        invincibleIndicator.style.opacity = 1;
+                        entity.active = false;
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            // [极其关键] 每次重绘先垫底一个纯白背景，防止系统自动切成黑色或透明
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制清新的网格背景增加设计感
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.03)';
+            ctx.lineWidth = 1;
+            for(let i = 0; i < width; i += 30) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, height); ctx.stroke(); }
+            for(let i = 0; i < height; i += 30) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(width, i); ctx.stroke(); }
+            ctx.restore();
+
+            entities.forEach(e => e.draw(ctx));
+            player.draw(ctx);
+        }
+
+        function initGame() {
+            resize();
+            player = new Player();
+            entities = [];
+            score = 0;
+            difficultyMultiplier = 1;
+            spawnTimer = baseSpawnRate;
+            itemSpawnTimer = 8000; // 第一次掉落时间
+            
+            scoreEl.textContent = '0.0';
+            invincibleIndicator.style.opacity = 0;
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+        }
+
+        function startGame() {
+            initGame();
+            currentState = GAME_STATE.PLAYING;
+            startTime = Date.now();
+            lastTime = performance.now();
+            
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function triggerGameOver() {
+            currentState = GAME_STATE.GAMEOVER;
+            player.isRainbow = true;
+            finalScoreEl.textContent = score.toFixed(1);
+            
+            // 稍微延迟显示菜单，让玩家欣赏一下彩虹脸
+            setTimeout(() => {
+                gameOverScreen.classList.remove('hidden');
+            }, 500);
+        }
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+
+        // 初始渲染一帧，防止黑屏
+        resize();
+        draw();
+        
+    </script>
+</body>
+</html>
